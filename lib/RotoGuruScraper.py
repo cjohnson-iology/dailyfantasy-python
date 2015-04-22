@@ -1,0 +1,125 @@
+import httplib2
+import logging
+import os
+from urllib import urlencode
+
+class RotoGuruScraper:
+
+  def __init__(self,**kwargs):
+
+    # pass in handler on instantiation
+    if 'handler' in kwargs:
+      self.handler = kwargs['handler']
+    else:
+      self.handler = httplib2.Http(".cache")
+
+    # initialize logger
+    if 'logger' in kwargs:
+      self.logger = kwargs['logger']
+    else:
+      self.logger = logging.getLogger(__name__)
+    
+  def nba_players(self, extra_params=None, fn=None):
+
+    # default
+    content = None
+
+    # will add query string later
+    base_url = 'http://rotoguru1.com/cgi-bin/hoopstat-daterange.pl?'
+
+    # if caller does not pass params, these are what are used in query string
+    default_params = {
+      'startdate': '',
+      'date': '',
+      'saldate': '',
+      'g': 0,
+      'gameday': '',
+      'ha': '',
+      'min': '',
+      'tmptmin': 0,
+      'tmptmax': 999,
+      'opptmin': 0,
+      'opptmax': 999,
+      'gmptmin': 0,
+      'gmptmax': 999,
+      'sd': 0
+    }
+
+    # merge params with base if passed when called
+    if extra_params:
+      z = default_params
+      z.update(extra_params)
+      params = z
+    else:
+      params = default_params
+
+    url = base_url + urlencode(params)
+    self.logger.debug(url)
+
+    if(fn):
+      content = self._get_from_file(fn)
+
+    # if not in a file, then get from the web and save it
+    if not content:
+      self.logger.debug('getting from web: ' + url)
+      content = self._get_from_web(url)
+
+      # if not from web either, then log an error
+      if not content:
+        self.logger.error('could not get content from file or url')
+
+    else:
+      self.logger.debug('got from file: ' + fn)
+
+    return content, url
+
+  ### start "private" methods
+
+  def _get_from_file(self, fn):
+    content = None
+
+    # test if file exists, if so, slurp it into content
+    if(fn):
+      if os.path.isfile(fn):
+        try:
+          with open(fn) as x:
+            content = x.read()
+
+        except:
+          self.logger.exception('could not read from file ' + fn)
+
+    return content
+
+  def _get_from_web(self, url, fn=None):
+    # content is none if file can't be downloaded
+    content = None
+
+    # try to download, if successful, then save file
+    try:
+      (resp, body) = self.handler.request(url, "GET")
+      self.logger.debug('got content from web')
+
+    except:
+      self.logger.exception('could not get from web ' + url)
+
+    # want to make sure that get the correct content, so check request status before returning content
+    if resp.status == 200:
+      content = body
+
+      # save content to a file if fn passed as parameter
+      if fn:
+        try:
+          with open(fn, 'w') as outfile:
+            outfile.write(content)
+        except:
+          self.logger.exception('could not save file ' + fn)
+
+    # if wrong, then log the actual message, content value is still None
+    else:
+      self.logger.error('http request error ' + str(resp.status))
+
+    # ship it
+    return content
+
+if __name__ == "__main__":
+  pass
